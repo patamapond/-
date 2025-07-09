@@ -1,0 +1,612 @@
+// กำหนด ID ของ Google Spreadsheet ที่จะใช้เก็บข้อมูล
+//const SPREADSHEET_ID = '1CyJ6YkPPkg7D88FJPT4cOl0E0tkgcFQ63ovYpUKPSUY';
+const SPREADSHEET_ID = '1CyJ6YkPPkg7D88FJPT4cOl0E0tkgcFQ63ovYpUKPSUY';
+const SHEET_NAME = 'คิว'; // ชื่อชีทที่ใช้เก็บข้อมูลคิว
+
+// กำหนด Username และ Password สำหรับเจ้าหน้าที่
+const STAFF_USERNAMES = [
+  "2445003", "4345041", "5450037", "5250174", "5750007",
+  "6150175", "5550264", "6150076", "5950149", "6550002",
+  "4645055", "6750346"
+];
+const STAFF_PASSWORD = "12345";
+
+// กำหนดชื่อ Property สำหรับเก็บค่าคิวปัจจุบันและวันที่รีเซ็ต
+const CURRENT_QUEUE_PROPERTY = 'currentQueueNumber';
+const LAST_RESET_DATE_PROPERTY = 'lastResetDate';
+const COUNTER_STATUS_PROPERTY = 'counterStatus'; // สำหรับเก็บสถานะเปิด/ปิดเคาน์เตอร์
+
+/**
+ * ฟังก์ชันหลักสำหรับให้บริการ Web App (เมื่อมีการเข้าถึง URL ของ Web App)
+ * จะคืนค่าเนื้อหา HTML ของ index.html
+ * @param {GoogleAppsScript.Events.DoGet} e - เหตุการณ์ GET request
+ * @returns {GoogleAppsScript.HTML.HtmlOutput} HTML content
+ */
+function doGet(e) {
+  // สร้าง HTML output จากไฟล์ index.html
+  const htmlOutput = HtmlService.createTemplateFromFile('index').evaluate();
+  // ตั้งค่าสำหรับแคชเพื่อประสิทธิภาพ
+  htmlOutput.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return htmlOutput;
+}
+
+
+/**
+ * ฟังก์ชันหลักสำหรับจัดการคำขอ POST จาก Web App (เช่น การเรียกคิวของเจ้าหน้าที่)
+ * ใช้สำหรับ STAFF ACTIONS โดยเฉพาะ
+ * @param {GoogleAppsScript.Events.DoPost} e - เหตุการณ์ POST request
+ * @returns {GoogleAppsScript.Content.TextOutput} JSON response
+ */
+function doPost(e) {
+  // ตั้งค่า CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    const data = JSON.parse(e.postData.contents);
+    let result;
+    
+    if (data.action === 'submitQueue') {
+      result = submitQueue(data);
+    } 
+    // เพิ่มเงื่อนไขอื่นๆ ตามต้องการ
+    
+    const response = ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+    
+    // เพิ่ม headers สำหรับ CORS
+    for (const [key, value] of Object.entries(headers)) {
+      response.setHeader(key, value);
+    }
+    
+    return response;
+  } catch (error) {
+    const errorResponse = ContentService.createTextOutput(JSON.stringify({
+      status: 'error',
+      message: error.message
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+    for (const [key, value] of Object.entries(headers)) {
+      errorResponse.setHeader(key, value);
+    }
+    
+    return errorResponse;
+  }
+}
+
+// เพิ่มฟังก์ชัน doOptions สำหรับจัดการ preflight requests
+function doOptions() {
+  const output = ContentService.createTextOutput();
+  output.setHeaders({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json'
+  });
+  return output;
+}
+
+
+/**
+ * Helper function เพื่อเข้าถึง Google Sheet
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} Spreadsheet sheet object
+ */
+function getSheet() {
+  try {
+    // วิธีที่ 1: ใช้ Spreadsheet ID โดยตรง (แนะนำ)
+    const spreadsheet = SpreadsheetApp.openById('1CyJ6YkPPkg7D88FJPT4cOl0E0tkgcFQ63ovYpUKPSUY');
+    
+    // วิธีที่ 2: หรือใช้ Spreadsheet ที่ผูกกับสคริปต์
+    // const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    
+    const sheet = spreadsheet.getSheetByName('คิว');
+    
+    if (!sheet) {
+      // ถ้าไม่มีชีท 'คิว' ให้สร้างใหม่
+      const newSheet = spreadsheet.insertSheet('คิว');
+      // ตั้งค่าหัวคอลัมน์
+      const headers = [
+        "วันที่", "เวลา", "หมายเลขคิว", "รหัสนักศึกษา", "ชื่อ-นามสกุล",
+        "ภาคการศึกษา", "ผู้มารับเอกสาร", "ประเภทบริการ", "โปรดระบุ",
+        "เคาน์เตอร์", "สถานะคิว"
+      ];
+      newSheet.appendRow(headers);
+      return newSheet;
+    }
+    return sheet;
+  } catch (error) {
+    console.error('Error accessing spreadsheet:', error);
+    throw new Error('ไม่สามารถเข้าถึง Google Sheet ได้: ' + error.message);
+  }
+}
+
+/**
+ * ฟังก์ชันสำหรับรีเซ็ตหมายเลขคิวและสถานะเคาน์เตอร์ทุกวัน
+ */
+function resetDailyQueue() {
+  const properties = PropertiesService.getScriptProperties();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const lastResetDate = properties.getProperty(LAST_RESET_DATE_PROPERTY);
+
+  if (lastResetDate !== today) {
+    Logger.log(`Resetting queue for new day: ${today}`);
+    properties.setProperty(CURRENT_QUEUE_PROPERTY, '0'); // รีเซ็ตคิวเป็น 0
+    properties.setProperty(LAST_RESET_DATE_PROPERTY, today); // อัปเดตวันที่รีเซ็ต
+
+    // รีเซ็ตสถานะเคาน์เตอร์ทั้งหมดเป็น 'เปิด' และคิวปัจจุบันเป็น null
+    for (let i = 1; i <= 5; i++) {
+      properties.setProperty(`${COUNTER_STATUS_PROPERTY}_${i}`, 'เปิด');
+      properties.deleteProperty(`counterCurrentQueue_${i}`); // ลบคิวปัจจุบันของแต่ละเคาน์เตอร์
+    }
+
+    const sheet = getSheet();
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const statusColIndex = headers.indexOf("สถานะคิว") + 1; // หาคอลัมน์สถานะคิว (เป็น 1-based index)
+
+    if (statusColIndex > 0) {
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) { // ตรวจสอบว่ามีข้อมูลอื่นที่ไม่ใช่ header หรือไม่
+        const statuses = sheet.getRange(2, statusColIndex, lastRow - 1, 1).getValues();
+        // เปลี่ยนสถานะคิว "เรียก" หรือ "รอ" เป็น "ข้าม" หากยังไม่เสร็จสิ้น
+        let hasChanges = false;
+        for (let i = 0; i < statuses.length; i++) {
+          if (statuses[i][0] === 'เรียก' || statuses[i][0] === 'รอ') {
+            sheet.getRange(i + 2, statusColIndex).setValue('ข้าม');
+            hasChanges = true;
+          }
+        }
+        if (hasChanges) {
+          Logger.log('Updated pending/called queues to "ข้าม" for the new day.');
+        }
+      }
+    }
+  }
+}
+
+
+/**
+ * ฟังก์ชันสำหรับเพิ่มคิวใหม่ของนักศึกษา
+ * @param {Object} formData - ข้อมูลจากฟอร์มนักศึกษา
+ * @returns {Object} ข้อมูลคิวที่ลงทะเบียนสำเร็จ
+ */
+/**
+ * ฟังก์ชันสำหรับบันทึกคิวใหม่ลงใน Google Sheet
+ * @param {Object} formData - ข้อมูลจากฟอร์ม
+ * @returns {Object} ผลลัพธ์การบันทึก
+ */
+function submitQueue(formData) {
+  const startTime = new Date();
+  console.log('เริ่มต้นฟังก์ชัน submitQueue', { formData, startTime });
+
+  try {
+    // 1. ตรวจสอบข้อมูลที่จำเป็น
+    if (!formData.studentId || formData.studentId.length !== 8) {
+      throw new Error('กรุณากรอกรหัสนักศึกษา 8 หลักให้ถูกต้อง');
+    }
+
+    if (!formData.fullName) {
+      throw new Error('กรุณากรอกชื่อ-นามสกุล');
+    }
+
+    if (!formData.serviceType) {
+      throw new Error('กรุณาเลือกประเภทบริการ');
+    }
+
+    // 2. ตรวจสอบและรีเซ็ตคิวหากเป็นวันใหม่
+    resetDailyQueue();
+
+    // 3. เตรียมข้อมูลสำหรับบันทึก
+    const sheet = getSheet();
+    const properties = PropertiesService.getScriptProperties();
+    
+    let currentQueueNumber = parseInt(properties.getProperty(CURRENT_QUEUE_PROPERTY) || '0');
+    currentQueueNumber++;
+    
+    const queueNumber = Utilities.formatString('Q%03d', currentQueueNumber);
+    const now = new Date();
+    const date = Utilities.formatDate(now, 'Asia/Bangkok', 'dd/MM/yyyy');
+    const time = Utilities.formatDate(now, 'Asia/Bangkok', 'HH:mm:ss');
+
+    // 4. บันทึกข้อมูลลง Sheet
+    const newRow = [
+      date,                          // วันที่
+      time,                          // เวลา
+      queueNumber,                   // หมายเลขคิว
+      formData.studentId,            // รหัสนักศึกษา
+      formData.fullName,             // ชื่อ-นามสกุล
+      formData.semester || '',       // ภาคการศึกษา
+      formData.receiverName || '',   // ผู้มารับเอกสาร
+      formData.serviceType,          // ประเภทบริการ
+      formData.otherDetail || '',    // รายละเอียดอื่นๆ
+      '',                            // เคาน์เตอร์ (ว่างไว้ก่อน)
+      'รอ'                          // สถานะคิว
+    ];
+    
+    console.log('กำลังบันทึกข้อมูล:', newRow);
+    sheet.appendRow(newRow);
+    
+    // 5. อัปเดตหมายเลขคิวล่าสุด
+    properties.setProperty(CURRENT_QUEUE_PROPERTY, currentQueueNumber.toString());
+    
+    // 6. นับจำนวนคิวที่รอก่อนหน้า
+    const allData = sheet.getDataRange().getValues();
+    const pendingQueues = allData.slice(1) // ข้ามหัวคอลัมน์
+      .filter(row => row[10] === 'รอ' && row[2] < queueNumber);
+    
+    const processingTime = (new Date() - startTime) / 1000;
+    console.log('บันทึกข้อมูลสำเร็จ', { processingTime });
+
+    // 7. ส่งผลลัพธ์กลับ
+    return {
+      success: true,
+      queueNumber: queueNumber,
+      serviceType: formData.serviceType,
+      date: date,
+      time: time,
+      waitingCount: pendingQueues.length,
+      studentId: formData.studentId,
+      studentName: formData.fullName,
+      processingTime: processingTime + ' วินาที'
+    };
+
+  } catch (error) {
+    console.error('เกิดข้อผิดพลาดใน submitQueue:', error);
+    return {
+      success: false,
+      message: error.message,
+      errorDetails: error.stack
+    };
+  }
+}
+
+function getQueues() {
+  const startTime = new Date();
+  console.log('เริ่มต้นฟังก์ชัน getQueue', { startTime });
+
+  try {
+    // 1. อ่านข้อมูลจาก Google Sheet
+    const sheet = getSheet();
+    const data = sheet.getDataRange().getValues();
+
+    // 2. ข้ามหัวตาราง
+    const rows = data.slice(1);
+
+    if (rows.length === 0) {
+      throw new Error('ยังไม่มีข้อมูลคิวในระบบ');
+    }
+
+    // 3. แยกตามสถานะคิว
+    const waitingQueues = rows.filter(row => row[10] === 'รอ');
+    const calledQueues = rows.filter(row => row[10] === 'เรียก');
+    const completedQueues = rows.filter(row => row[10] === 'เสร็จสิ้น');
+
+    // 4. คืนข้อมูล
+    const result = {
+      success: true,
+      waitingQueues: waitingQueues.map(row => ({
+        queueNumber: row[2],
+        date: row[0],
+        time: row[1],
+        studentId: row[3],
+        fullName: row[4],
+        serviceType: row[7],
+        status: row[10]
+      })),
+      calledQueues: calledQueues.map(row => ({
+        queueNumber: row[2],
+        date: row[0],
+        time: row[1],
+        studentId: row[3],
+        fullName: row[4],
+        serviceType: row[7],
+        counter: row[9],
+        status: row[10],
+        callNum: row[11]
+      })),
+      completedQueues: completedQueues.map(row => ({
+        queueNumber: row[2],
+        date: row[0],
+        time: row[1],
+        studentId: row[3],
+        fullName: row[4],
+        serviceType: row[7],
+        status: row[10]
+      })),
+      processingTime: ((new Date() - startTime) / 1000) + ' วินาที'
+    };
+
+    console.log('ผลลัพธ์ getQueue():', result);
+    Logger.log('ส่งออก result: ' + JSON.stringify(result));
+    return JSON.stringify(result);
+
+  } catch (error) {
+    console.error('เกิดข้อผิดพลาดใน getQueue:', error);
+    return {
+      success: false,
+      message: error.message,
+      errorDetails: error.stack
+    };
+  }
+}
+
+
+
+
+/**
+ * ฟังก์ชันสำหรับดึงข้อมูลคิวทั้งหมดและสถานะเคาน์เตอร์สำหรับแสดงผล
+ * @returns {Object} ข้อมูลคิวที่เรียกแล้ว, คิวที่รอ, และสถานะเคาน์เตอร์
+ */
+function getQueueData() {
+  resetDailyQueue(); // ตรวจสอบและรีเซ็ตคิวหากเป็นวันใหม่
+
+  const sheet = getSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) { // ไม่มีข้อมูลนอกจาก header
+    return { calledQueues: [], pendingQueues: [], counterStatuses: getCounterStatuses() };
+  }
+
+  const headers = data[0];
+  const queueData = data.slice(1); // ข้อมูลคิว (ไม่รวม header)
+
+  const queueNumCol = headers.indexOf("หมายเลขคิว");
+  const counterCol = headers.indexOf("เคาน์เตอร์");
+  const statusCol = headers.indexOf("สถานะคิว");
+  const studentIdCol = headers.indexOf("รหัสนักศึกษา");
+  const studentNameCol = headers.indexOf("ชื่อ-นามสกุล");
+  const serviceTypeCol = headers.indexOf("ประเภทบริการ");
+  const timeCol = headers.indexOf("เวลา");
+
+  let calledQueues = [];
+  let pendingQueues = [];
+  const properties = PropertiesService.getScriptProperties();
+
+  // ดึงคิวที่เรียกไปแล้วสำหรับแต่ละเคาน์เตอร์
+  for (let i = 1; i <= 5; i++) {
+    const currentQueueOnCounter = properties.getProperty(`counterCurrentQueue_${i}`);
+    if (currentQueueOnCounter) {
+      calledQueues.push({
+        queueNumber: currentQueueOnCounter,
+        counter: i
+      });
+    }
+  }
+
+  // เรียงลำดับคิวที่เรียกแล้วตามหมายเลขคิว
+  calledQueues.sort((a, b) => a.queueNumber.localeCompare(b.queueNumber));
+
+  // ดึงคิวที่รอ (สถานะ 'รอ') และเรียงลำดับตามหมายเลขคิว
+  const allPending = queueData.filter(row => row[statusCol] === 'รอ')
+                               .sort((a, b) => a[queueNumCol].localeCompare(b[queueNumCol]));
+
+  pendingQueues = allPending.map(row => ({
+    queueNumber: row[queueNumCol],
+    studentId: row[studentIdCol],
+    studentName: row[studentNameCol],
+    serviceType: row[serviceTypeCol],
+    registrationTime: row[timeCol]
+  }));
+
+  // Logger.log(`Called Queues: ${JSON.stringify(calledQueues)}`);
+  // Logger.log(`Pending Queues: ${JSON.stringify(pendingQueues)}`);
+
+  return {
+    calledQueues: calledQueues,
+    pendingQueues: pendingQueues,
+    counterStatuses: getCounterStatuses()
+  };
+}
+
+/**
+ * ฟังก์ชันสำหรับเรียกคิวถัดไปสำหรับเคาน์เตอร์ที่ระบุ
+ * @param {number} counter - หมายเลขเคาน์เตอร์
+ * @returns {Object|null} ข้อมูลคิวที่ถูกเรียก หรือ null ถ้าไม่มีคิว
+ */
+function callNextQueue(counter) {
+  const sheet = getSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return null; // ไม่มีข้อมูลนอกจาก header
+
+  const headers = data[0];
+  const queueNumCol = headers.indexOf("หมายเลขคิว");
+  const statusCol = headers.indexOf("สถานะคิว");
+  const counterCol = headers.indexOf("เคาน์เตอร์");
+  const studentIdCol = headers.indexOf("รหัสนักศึกษา");
+  const studentNameCol = headers.indexOf("ชื่อ-นามสกุล");
+  const serviceTypeCol = headers.indexOf("ประเภทบริการ");
+  const semesterCol = headers.indexOf("ภาคการศึกษา");
+  const receiverNameCol = headers.indexOf("ผู้มารับเอกสาร");
+  const otherDetailsCol = headers.indexOf("โปรดระบุ");
+  const callNumCol = headers.indexOf("จำนวนครั้งที่เรียก");
+
+  // ค้นหาคิวที่มีสถานะ 'รอ' และมีหมายเลขคิวน้อยที่สุด
+  let nextQueueRow = null;
+  let nextQueueNumber = null;
+  let rowIndex = -1;
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][statusCol] === 'รอ') {
+      if (nextQueueNumber === null || data[i][queueNumCol] < nextQueueNumber) {
+        nextQueueNumber = data[i][queueNumCol];
+        nextQueueRow = data[i];
+        rowIndex = i + 1; // แถวในชีท (1-based index)
+      }
+    }
+  }
+
+  if (nextQueueRow) {
+    // อัปเดตสถานะคิวในชีทเป็น 'เรียก'
+    sheet.getRange(rowIndex, statusCol + 1).setValue('เรียก');
+    sheet.getRange(rowIndex, counterCol + 1).setValue(counter);
+    sheet.getRange(rowIndex, callNumCol + 1).setValue(1);
+
+    // เก็บข้อมูลคิวที่เรียกไปแล้วใน properties ของ Script สำหรับเคาน์เตอร์นั้น
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty(`counterCurrentQueue_${counter}`, nextQueueRow[queueNumCol]);
+
+    Logger.log(`Called queue ${nextQueueRow[queueNumCol]} for Counter ${counter}`);
+
+    return {
+      queueNumber: nextQueueRow[queueNumCol],
+      studentId: nextQueueRow[studentIdCol],
+      studentName: nextQueueRow[studentNameCol],
+      serviceType: nextQueueRow[serviceTypeCol],
+      semester: nextQueueRow[semesterCol],
+      receiverName: nextQueueRow[receiverNameCol],
+      otherDetails: nextQueueRow[otherDetailsCol],
+      counter: counter,
+      status: 'เรียก',
+
+    };
+  }
+  Logger.log(`No pending queue found for Counter ${counter}`);
+  return null;
+}
+
+/**
+ * ฟังก์ชันสำหรับเรียกคิวปัจจุบันซ้ำอีกครั้งสำหรับเคาน์เตอร์ที่ระบุ
+ * @param {number} counter - หมายเลขเคาน์เตอร์
+ * @returns {Object|null} ข้อมูลคิวที่ถูกเรียกซ้ำ หรือ null ถ้าไม่มีคิว
+ */
+function recallCurrentQueue(queueNum) {
+
+
+  const currentQueueOnCounter = queueNum;
+
+  if (currentQueueOnCounter) {
+    const sheet = getSheet();
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return null;
+
+    
+    const headers = data[0];
+    const queueNumCol = headers.indexOf("หมายเลขคิว");
+    const statusCol = headers.indexOf("สถานะคิว");
+    const studentIdCol = headers.indexOf("รหัสนักศึกษา");
+    const studentNameCol = headers.indexOf("ชื่อ-นามสกุล");
+    const serviceTypeCol = headers.indexOf("ประเภทบริการ");
+    const semesterCol = headers.indexOf("ภาคการศึกษา");
+    const receiverNameCol = headers.indexOf("ผู้มารับเอกสาร");
+    const otherDetailsCol = headers.indexOf("โปรดระบุ");
+    const callNumCol = headers.indexOf("จำนวนครั้งที่เรียก");
+    
+
+
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][queueNumCol] === currentQueueOnCounter && data[i][statusCol] === 'เรียก') {
+      sheet.getRange(i+1, callNumCol + 1).setValue(data[i][callNumCol] + 1);
+
+        Logger.log(`Recalled queue ${data[i][queueNumCol]} for Counter ${queueNum}`);
+        return {
+          queueNumber: data[i][queueNumCol],
+
+          status: 'เรียกซ้ำ',
+          callNum: data[i][callNumCol],
+        };
+      }
+    }
+  }
+  Logger.log(`No current queue to recall for queueNum ${queueNum}`);
+  return null;
+}
+
+/**
+ * ฟังก์ชันสำหรับสลับสถานะเปิด/ปิดของเคาน์เตอร์
+ * @param {number} counter - หมายเลขเคาน์เตอร์
+ * @returns {string} สถานะใหม่ ('เปิด' หรือ 'ปิด')
+ */
+function toggleCounterStatus(counter) {
+  const properties = PropertiesService.getScriptProperties();
+  const currentStatus = properties.getProperty(`${COUNTER_STATUS_PROPERTY}_${counter}`) || 'เปิด'; // Default เป็น 'เปิด'
+  const newStatus = currentStatus === 'เปิด' ? 'ปิด' : 'เปิด';
+  properties.setProperty(`${COUNTER_STATUS_PROPERTY}_${counter}`, newStatus);
+  Logger.log(`Counter ${counter} status toggled to: ${newStatus}`);
+  return newStatus;
+}
+
+/**
+ * ฟังก์ชันสำหรับดึงสถานะของเคาน์เตอร์ทั้งหมด
+ * @returns {Object} Object ที่มี key เป็นหมายเลขเคาน์เตอร์และ value เป็นสถานะ ('เปิด'/'ปิด')
+ */
+function getCounterStatuses() {
+  const properties = PropertiesService.getScriptProperties();
+  let statuses = {};
+  for (let i = 1; i <= 5; i++) {
+    statuses[i] = properties.getProperty(`${COUNTER_STATUS_PROPERTY}_${i}`) || 'เปิด';
+  }
+  return statuses;
+}
+
+/**
+ * ฟังก์ชันสำหรับตรวจสอบการเข้าสู่ระบบของเจ้าหน้าที่
+ * @param {string} username - ชื่อผู้ใช้
+ * @param {string} password - รหัสผ่าน
+ * @returns {boolean} true ถ้าเข้าสู่ระบบสำเร็จ, false ถ้าไม่สำเร็จ
+ */
+function checkStaffLogin(username, password) {
+  return STAFF_USERNAMES.includes(username) && password === STAFF_PASSWORD;
+}
+
+/**
+ * ฟังก์ชันสำหรับ Mark Queue as Done (เมื่อเจ้าหน้าที่ต้องการจบการให้บริการ)
+ * @param {string} queueNumber - หมายเลขคิวที่ต้องการ mark ว่าเสร็จสิ้น
+ * @param {number} counter - หมายเลขเคาน์เตอร์
+ * @returns {boolean} true ถ้าอัปเดตสำเร็จ
+ */
+function markQueueAsDone(queueNumber, counter) {
+  const sheet = getSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return false;
+
+  const headers = data[0];
+  const queueNumCol = headers.indexOf("หมายเลขคิว");
+  const statusCol = headers.indexOf("สถานะคิว");
+  const counterCol = headers.indexOf("เคาน์เตอร์");
+
+  for (let i = 1; i < data.length; i++) {
+    // ค้นหาคิวที่ตรงกับหมายเลขคิวและสถานะ 'เรียก' หรือ 'รอ' ที่ยังไม่เสร็จสิ้น
+    if (data[i][queueNumCol] === queueNumber && (data[i][statusCol] === 'เรียก' || data[i][statusCol] === 'รอ')) {
+      sheet.getRange(i + 1, statusCol + 1).setValue('เสร็จสิ้น'); // เปลี่ยนสถานะเป็น 'เสร็จสิ้น'
+      const properties = PropertiesService.getScriptProperties();
+      // ลบคิวที่ถูกเรียกจากเคาน์เตอร์นั้นหากตรงกัน
+      if (properties.getProperty(`counterCurrentQueue_${counter}`) === queueNumber) {
+        properties.deleteProperty(`counterCurrentQueue_${counter}`);
+      }
+      Logger.log(`Queue ${queueNumber} marked as 'เสร็จสิ้น' by Counter ${counter}`);
+      return true;
+    }
+  }
+  Logger.log(`Queue ${queueNumber} not found or not in 'เรียก'/'รอ' status to mark as done.`);
+  return false;
+}
+
+
+
+
+/**
+ * ฟังก์ชันสำหรับลบคิว (สถานะ 'ข้าม') จากระบบจัดการ
+ * @param {string} queueNumber - หมายเลขคิวที่ต้องการลบ (สถานะ 'ข้าม')
+ * @returns {boolean} true ถ้าลบสำเร็จ
+ */
+function deleteSkippedQueue(queueNumber) {
+  const sheet = getSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return false;
+
+  const headers = data[0];
+  const queueNumCol = headers.indexOf("หมายเลขคิว");
+  const statusCol = headers.indexOf("สถานะคิว");
+
+  for (let i = data.length - 1; i >= 1; i--) { // ลบจากข้างล่างขึ้นไป
+    if (data[i][queueNumCol] === queueNumber && data[i][statusCol] === 'ข้าม') {
+      sheet.deleteRow(i + 1);
+      Logger.log(`Queue ${queueNumber} with status 'ข้าม' deleted.`);
+      return true;
+    }
+  }
+  Logger.log(`Queue ${queueNumber} with status 'ข้าม' not found for deletion.`);
+  return false;
+}
