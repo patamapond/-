@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการคิวการเงิน SPU</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap');
+    body {
+      font-family: 'Kanit', sans-serif;
+    }
+
+    .pulse-animation {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.7;
+      }
+    }
+
+    .toggle-button {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 24px;
+    }
+
+    .toggle-button input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: #10B981;
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(24px);
+    }
+  </style>
+</head>
+
+<body class="bg-gradient-to-br from-pink-50 to-orange-50 min-h-screen">
+  <header class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold text-white bg-[#ff5790] px-4 py-2 rounded-lg">
+            คิวการเงิน มหาวิทยาลัยศรีปทุม SPU
+          </h1>
+        </div>
+        <div class="flex items-center text-gray-700">
+          <span class="text-sm font-medium" id="currentDateTime"></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="menuScreen" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold text-gray-900 mb-8">
+        ระบบจัดการคิวการเงิน
+      </h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
+        <button onclick="showStudentScreen()"
+          class="bg-white hover:bg-gray-50 border-2 border-[#ff5790] rounded-xl p-8 shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105">
+          <div class="text-[#ff5790] text-5xl mb-4">👨‍🎓</div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">สำหรับนักศึกษา</h3>
+          <p class="text-gray-600">ลงทะเบียนรับคิว</p>
+        </button>
+
+        <button onclick="showDisplayScreen()"
+          class="bg-white hover:bg-gray-50 border-2 border-[#ff5790] rounded-xl p-8 shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105">
+          <div class="text-[#ff5790] text-5xl mb-4">📺</div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">หน้าจอแสดงคิว</h3>
+          <p class="text-gray-600">ติดตามคิวปัจจุบัน</p>
+        </button>
+
+        <button onclick="showStaffScreen()"
+          class="bg-white hover:bg-gray-50 border-2 border-[#ff5790] rounded-xl p-8 shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105">
+          <div class="text-[#ff5790] text-5xl mb-4">👨‍💼</div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">สำหรับเจ้าหน้าที่</h3>
+          <p class="text-gray-600">จัดการระบบคิว</p>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="studentScreen" class="hidden max-w-2xl mx-auto px-4 py-4">
+    <button onclick="showMenuScreen()"
+      class="flex items-center text-gray-600 hover:text-gray-800 transition-colors mb-6">
+      ← กลับหน้าหลัก
+    </button>
+
+    <div class="bg-white rounded-xl shadow-lg p-8">
+      <h1 class="text-2xl font-bold text-center text-gray-800 mb-8">
+        ลงทะเบียนรับคิว - สำหรับนักศึกษา
+      </h1>
+
+      <form id="studentForm" class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            รหัสนักศึกษา (8 หลัก)
+          </label>
+          <input type="text" id="studentId" maxlength="8"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+            placeholder="กรอกรหัสนักศึกษา 8 หลัก">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            ชื่อ-นามสกุล
+          </label>
+          <input type="text" id="fullName"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+            placeholder="กรอกชื่อ-นามสกุล">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-4">
+            ประเภทการขอรับบริการ
+          </label>
+          <div class="space-y-3">
+            <label class="flex items-center">
+              <input type="radio" name="serviceType" value="ขอใบเสร็จ/ขอเอกสารเบิก"
+                class="h-4 w-4 text-[#ff5790] focus:ring-[#ff5790] border-gray-300">
+              <span class="ml-3 text-gray-700">ขอใบเสร็จ/ขอเอกสารเบิก</span>
+            </label>
+            <label class="flex items-center">
+              <input type="radio" name="serviceType" value="ชำระเงิน"
+                class="h-4 w-4 text-[#ff5790] focus:ring-[#ff5790] border-gray-300">
+              <span class="ml-3 text-gray-700">ชำระเงิน</span>
+            </label>
+            <label class="flex items-center">
+              <input type="radio" name="serviceType" value="สอบถามข้อมูล"
+                class="h-4 w-4 text-[#ff5790] focus:ring-[#ff5790] border-gray-300">
+              <span class="ml-3 text-gray-700">สอบถามข้อมูล</span>
+            </label>
+            <label class="flex items-center">
+              <input type="radio" name="serviceType" value="อื่นๆ"
+                class="h-4 w-4 text-[#ff5790] focus:ring-[#ff5790] border-gray-300">
+              <span class="ml-3 text-gray-700">อื่นๆ</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="receiptFields" class="hidden space-y-4 bg-gray-50 p-4 rounded-lg">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              ภาคการศึกษาที่ต้องการรับใบเสร็จ
+            </label>
+            <input type="text" id="semester"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+              placeholder="ระบุภาคการศึกษา">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              ชื่อ-นามสกุล (ผู้มารับเอกสาร)
+            </label>
+            <input type="text" id="receiverName"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+              placeholder="กรอกชื่อ-นามสกุล ผู้มารับเอกสาร">
+          </div>
+        </div>
+
+        <div id="otherFields" class="hidden bg-gray-50 p-4 rounded-lg">
+          <label class="block text-sm font-medium text-gray-700 mb-2">
+            โปรดระบุ
+          </label>
+          <textarea id="otherDetail"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+            placeholder="กรอกรายละเอียด" rows="3"></textarea>
+        </div>
+
+        <div class="text-center pt-4">
+          <button type="submit"
+            class="bg-[#ff5790] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#e64a82] transition-colors">
+            รับคิว
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="successScreen" class="hidden max-w-2xl mx-auto px-4 py-4">
+    <div class="text-center mb-8">
+      <div class="flex items-center justify-center mb-4">
+        <div class="h-16 w-16 text-green-500 text-6xl">✓</div>
+      </div>
+      <h1 class="text-3xl font-bold text-green-600 mb-2">ลงทะเบียนคิวสำเร็จ</h1>
+      <p class="text-gray-600">คิวการเงิน มหาวิทยาลัยศรีปทุม</p>
+    </div>
+
+    <div class="bg-[#ffd9e6] rounded-xl p-8 text-center mb-6">
+      <div id="queueNumberDisplay" class="text-6xl font-bold text-[#ff5790] mb-4"></div>
+      <div id="queueDetails" class="space-y-2 text-lg"></div>
+    </div>
+
+    <div class="bg-[#ffcd78] rounded-xl p-6 text-center mb-6">
+      <p class="text-lg font-medium text-gray-800">
+        กรุณาบันทึกหน้าจอคิวและรอเรียกคิวที่หน้าจอแสดงผล
+      </p>
+    </div>
+
+    <div class="text-center">
+      <button onclick="showMenuScreen()"
+        class="bg-[#ff5790] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#e64a82] transition-colors">
+        ตกลง
+      </button>
+    </div>
+  </div>
+
+  <div id="displayScreen" class="hidden max-w-6xl mx-auto px-4 py-4">
+    <div class="flex items-center justify-between mb-6">
+      <button onclick="showMenuScreen()"
+        class="flex items-center text-gray-600 hover:text-gray-800 transition-colors">
+        ← กลับหน้าหลัก
+      </button>
+      <div class="flex items-center text-gray-700">
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div class="bg-[#ff5790] text-white p-6">
+        <h1 class="text-3xl font-bold text-center mb-4">หน้าจอแสดงคิว</h1>
+        <div class="grid grid-cols-2 gap-4 text-center">
+          <div class="bg-white/20 rounded-lg p-4">
+            <h2 class="text-xl font-semibold">หมายเลขคิว</h2>
+          </div>
+          <div class="bg-white/20 rounded-lg p-4">
+            <h2 class="text-xl font-semibold">เคาน์เตอร์</h2>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-8">
+        <div id="currentQueueDisplay" class="grid grid-cols-2 bg-[#ffd9e6] rounded-t-lg blink">
+          <div class="p-4 text-center text-xl font-bold border-r border-white" id="display-queue-number">-</div>
+          <div class="p-4 text-center text-xl font-bold" id="display-counter-number">-</div>
+        </div>
+
+        <div id="previous-queue-1" class="grid grid-cols-2 bg-gray-100">
+          <div class="p-4 text-center border-r border-white">-</div>
+          <div class="p-4 text-center">-</div>
+        </div>
+
+        <div id="previous-queue-2" class="grid grid-cols-2 bg-gray-100 rounded-b-lg">
+          <div class="p-4 text-center border-r border-white">-</div>
+          <div class="p-4 text-center">-</div>
+        </div>
+      </div>
+
+      <div id="previousQueuesDisplay" class="hidden mt-8" hidden>
+        <h3 class="text-lg font-semibold text-gray-700 mb-4 text-center">
+          คิวที่เสร็จสิ้นแล้ว
+        </h3>
+        <div id="previousQueuesList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div id="staffLoginScreen" class="hidden max-w-md mx-auto px-4 py-4">
+    <button onclick="showMenuScreen()"
+      class="flex items-center text-gray-600 hover:text-gray-800 transition-colors mb-6">
+      ← กลับหน้าหลัก
+    </button>
+
+    <div class="bg-white rounded-xl shadow-lg p-8">
+      <h1 class="text-2xl font-bold text-center text-gray-800 mb-8">
+        เข้าสู่ระบบเจ้าหน้าที่
+      </h1>
+
+      <form id="staffLoginForm" class="space-y-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
+          <input type="text" id="staffUsername"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+            placeholder="กรอก Username">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+          <input type="password" id="staffPassword"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ff5790] focus:border-transparent"
+            placeholder="กรอก Password">
+        </div>
+
+        <button type="submit"
+          class="w-full bg-[#ff5790] text-white py-3 rounded-lg font-semibold hover:bg-[#e64a82] transition-colors">
+          เข้าสู่ระบบ
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="staffPanelScreen" class="hidden max-w-7xl mx-auto px-4 py-4">
+    <div class="flex items-center justify-between mb-6">
+      <button onclick="showMenuScreen()"
+        class="flex items-center text-gray-600 hover:text-gray-800 transition-colors">
+        ← กลับหน้าหลัก
+      </button>
+      <button onclick="staffLogout()" class="flex items-center text-red-600 hover:text-red-800 transition-colors">
+        ออกจากระบบ
+      </button>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-lg p-6">
+      <h1 class="text-2xl font-bold text-center text-gray-800 mb-8">
+        ระบบจัดการคิว - เจ้าหน้าที่
+      </h1>
+
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8" id="counterControls">
+        </div>
+
+      <div class="bg-gray-50 rounded-lg p-6">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">
+          คิวที่รอดำเนินการ (<span id="waitingCount">0</span>)
+        </h2>
+
+        <div id="waitingQueuesTable" class="overflow-x-auto">
+          <p class="text-gray-500 text-center py-8">ไม่มีคิวที่รอดำเนินการ</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    //const WEB_APP_URL = '<?= ScriptApp.getService().getUrl() ?>';
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxpphedTzMcisjTEpreXrR80Ol9LZjKlzYM09b8uGeXGgKxxs4kK_Fk3bpy5X_VFEw3tg/exec';
+    const VALID_USERNAMES = ['2445003', '4345041', '5450037', '5250174', '5750007', '6150175', '5550264', '6150076', '5950149', '6550002', '4645055', '6750346'];
+    // Global variables
+    let currentQueues = [null, null, null, null, null];
+    let activeCounters = [true, true, true, true, true];
+    let waitingQueues = [];
+    let displayScreenInterval; // For clearing the interval when navigating away from display screen
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function () {
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+      setupEventListeners();
+    });
+
+    function updateDateTime() {
+      const now = new Date();
+      const options = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'Asia/Bangkok'
+      };
+      document.getElementById('currentDateTime').textContent = now.toLocaleDateString('th-TH', options);
+    }
+
+    function setupEventListeners() {
+      // Student form
+      document.getElementById('studentForm').addEventListener('submit', handleStudentSubmit);
+      // Service type radio buttons
+      document.querySelectorAll('input[name="serviceType"]').forEach(radio => {
+        radio.addEventListener('change', handleServiceTypeChange);
+      });
+      // Staff login form
+      document.getElementById('staffLoginForm').addEventListener('submit', handleStaffLogin);
+      // Student ID input validation
+      document.getElementById('studentId').addEventListener('input', function (e) {
+        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 8);
+      });
+    }
+
+    function handleServiceTypeChange(e) {
+      const receiptFields = document.getElementById('receiptFields');
+      const otherFields = document.getElementById('otherFields');
+
+      if (e.target.value === 'ขอใบเสร็จ/ขอเอกสารเบิก') {
+        receiptFields.classList.remove('hidden');
+        otherFields.classList.add('hidden');
+      } else if (e.target.value === 'อื่นๆ') {
+        otherFields.classList.remove('hidden');
+        receiptFields.classList.add('hidden');
+      } else {
+        receiptFields.classList.add('hidden');
+        otherFields.classList.add('hidden');
+      }
+    }
+
+    function handleStudentSubmit(e) {
+      e.preventDefault();
+      const studentId = document.getElementById('studentId').value.trim();
+      const fullName = document.getElementById('fullName').value.trim();
+      const selectedService = document.querySelector('input[name="serviceType"]:checked');
+      const semester = document.getElementById('semester').value.trim();
+      const receiverName = document.getElementById('receiverName').value.trim();
+      const otherDetail = document.getElementById('otherDetail').value.trim();
+      if (studentId.length !== 8) {
+        alert('กรุณากรอกรหัสนักศึกษาให้ครบ 8 หลัก');
+        return;
+      }
+
+      if (fullName === '') {
+        alert('กรุณากรอกชื่อ-นามสกุล');
+        return;
+      }
+
+      if (!selectedService) {
+        alert('กรุณาเลือกประเภทการขอรับบริการ');
+        return;
+      }
+
+      const serviceType = selectedService.value;
+
+      if (serviceType === 'ขอใบเสร็จ/ขอเอกสารเบิก') {
+        if (semester === '' || receiverName === '') {
+          alert('กรุณากรอกข้อมูลในส่วนของใบเสร็จให้ครบถ้วน');
+          return;
+        }
+      }
+
+      if (serviceType === 'อื่นๆ' && otherDetail === '') {
+        alert('กรุณาระบุรายละเอียดเพิ่มเติม');
+        return;
+      }
+
+      const formData = {
+        studentId: document.getElementById('studentId').value,
+        fullName: document.getElementById('fullName').value,
+        serviceType: document.querySelector('input[name="serviceType"]:checked')?.value,
+        semester: document.getElementById('semester').value || '',
+        receiverName: document.getElementById('receiverName').value || '',
+        otherDetail: document.getElementById('otherDetail').value || ''
+      };
+      // เรียกใช้ Google Apps Script Function
+      google.script.run
+        .withSuccessHandler(function (result) {
+          // เรียกเมื่อสำเร็จ
+          document.getElementById('studentForm').reset();
+
+          showSuccessScreen(result.queueNumber, result.serviceType, result.waitingCount);
+        })
+        .withFailureHandler(function (error) {
+          // เรียกเมื่อเกิดข้อผิดพลาด
+          console.error('Error:', error);
+          alert('เกิดข้อผิดพลาด: ' + error.message);
+        })
+        .submitQueue(formData);
+      // ส่งข้อมูลไปยังฟังก์ชัน submitQueue ใน GAS
+    }
+
+    function showSuccessScreen(queueNumber, serviceType, waitingCount) {
+      const now = new Date();
+      document.getElementById('queueNumberDisplay').textContent = queueNumber;
+      document.getElementById('queueDetails').innerHTML = `
+                <p><span class="font-semibold">ประเภท:</span> ${serviceType}</p>
+                <p><span class="font-semibold">วันที่:</span> ${now.toLocaleDateString('th-TH')}</p>
+                <p><span class="font-semibold">เวลา:</span> ${now.toLocaleTimeString('th-TH')}</p>
+                <p><span class="font-semibold">มีคิวรอก่อนหน้า:</span> ${waitingCount} คิว</p>
+            `;
+      hideAllScreens();
+      document.getElementById('successScreen').classList.remove('hidden');
+    }
+
+    async function handleStaffLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('staffUsername').value;
+      const password = document.getElementById('staffPassword').value;
+
+      if (!VALID_USERNAMES.includes(username) || password !== '12345') {
+        alert('Username หรือ Password ไม่ถูกต้อง');
+        return;
+      }
+
+      showStaffPanelScreen();
+    }
+
+    function showStaffPanelScreen() {
+      hideAllScreens();
+      document.getElementById('staffPanelScreen').classList.remove('hidden');
+      generateCounterControls();
+      //console.log('99090');
+      loadQueues();
+    }
+
+    function generateCounterControls() {
+      const container = document.getElementById('counterControls');
+      container.innerHTML = '';
+
+      for (let i = 0; i < 5; i++) {
+        const counterDiv = document.createElement('div');
+        counterDiv.className = 'bg-gray-50 rounded-lg p-4';
+        counterDiv.innerHTML = `
+                    <div class="text-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-700">เคาน์เตอร์ ${i + 1}</h3>
+                        <div class="text-2xl font-bold text-[#ff5790] my-2" id="counter${i}Queue">-</div>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <button id="callBtn${i}" onclick="callNextQueue(${i})" ${!activeCounters[i] || currentQueues[i] !== null ? 'disabled' : ''} 
+                                class="w-full bg-[#ffb6c1] text-black py-2 px-3 rounded text-sm font-medium hover:bg-[#ff9db3] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            🔊 เรียกคิว
+                        </button>
+                        
+                        <button id="repeatBtn${i}"  onclick="repeatQueue(${i})" ${!activeCounters[i] || currentQueues[i] === null ? 'disabled' : ''} 
+                                class="w-full bg-[#b6e0ff] text-black py-2 px-3 rounded text-sm font-medium hover:bg-[#9dd6ff] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            🔄 เรียกซ้ำ
+                        </button>
+                        
+                        <button id="completeBtn${i}" onclick="completeQueue(${i})" ${!activeCounters[i] || currentQueues[i] === null ? 'disabled' : ''} 
+                                class="w-full bg-[#d0ffbc] text-black py-2 px-3 rounded text-sm font-medium hover:bg-[#c1ff9d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            ✓ เสร็จสิ้น
+                        </button>
+                        
+                        <div class="text-center">
+                            <label class="toggle-button">
+                                <input type="checkbox" ${activeCounters[i] ? 'checked' : ''} onchange="toggleCounter(${i})">
+                                <span class="slider"></span>
+                            </label>
+                            <p class="text-xs text-gray-600 mt-1">ปิด-เปิด</p>
+                        </div>
+                    </div>
+                `;
+        container.appendChild(counterDiv);
+      }
+    }
+
+    function loadQueues() {
+      google.script.run
+        .withSuccessHandler(function (result) {
+          const parsed = JSON.parse(result); // ต้อง parse ถ้า return เป็น string
+          if (parsed.success) {
+            waitingQueues = parsed.waitingQueues || []; // รับเฉพาะ 'รอ' ที่ส่งมาจาก Apps Script
+            updateWaitingQueuesDisplay(parsed);
+          } else {
+            console.error('Response success = false:', parsed);
+          }
+        })
+        .withFailureHandler(function (error) {
+          console.error('Error loading queues:', error);
+        })
+        .getQueues();
+      // เรียกฟังก์ชันจาก Apps Script ที่คุณสร้างไว้
+    }
+
+    function updateWaitingQueuesDisplay(result) {
+      //console.log(result)
+      const container = document.getElementById('waitingQueuesTable');
+      const countEl = document.getElementById('waitingCount');
+
+      if (!container || !countEl) {
+        console.error('ไม่พบองค์ประกอบ waitingQueuesTable หรือ waitingCount ใน DOM');
+        return;
+      }
+
+      const queues = result?.waitingQueues || [];
+      countEl.textContent = queues.length;
+      if (queues.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-8">ไม่มีคิวที่รอดำเนินการ</p>';
+        return;
+      }
+
+      container.innerHTML = `
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b">
+          <th class="text-left py-2">หมายเลขคิว</th>
+          <th class="text-left py-2">รหัสนักศึกษา</th>
+          <th class="text-left py-2">ชื่อ-นามสกุล</th>
+          <th class="text-left py-2">ประเภทบริการ</th>
+          <th class="text-left py-2">เวลาลงทะเบียน</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${queues.map(queue => `
+          <tr class="border-b">
+            <td class="py-2 font-semibold">${queue.queueNumber}</td>
+            <td class="py-2">${queue.studentId}</td>
+            <td class="py-2">${queue.fullName}</td>
+            <td class="py-2">${queue.serviceType}</td>
+            <td class="py-2">${formatTime(queue.time)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+    }
+
+    // helper แปลง time เป็น HH:mm น่าอ่าน
+    function formatTime(isoString) {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function callNextQueue(counterIndex) {
+      if (!Array.isArray(waitingQueues) || waitingQueues.length === 0) {
+        alert('ไม่มีคิวที่รอการเรียก');
+        return;
+      }
+
+      const nextQueue = waitingQueues.shift(); // ดึงคิวแรกออก
+      currentQueues[counterIndex] = { ...nextQueue, counter: counterIndex + 1 };
+      // อัปเดต UI ของเคาน์เตอร์
+      const queueEl = document.getElementById(`counter${counterIndex}Queue`);
+      if (queueEl) {
+        queueEl.textContent = nextQueue.queueNumber;
+      }
+
+      // เรียก Apps Script แบบ async
+      google.script.run
+        .withSuccessHandler((result) => {
+          //const parsed = JSON.parse(result); // ต้อง parse ถ้า return เป็น string
+          if (result) {
+            //alert(`เรียกคิว ${nextQueue.queueNumber} ที่เคาน์เตอร์ ${counterIndex + 1}`);
+
+            //speakQueue(nextQueue.queueNumber, counterIndex + 1);
+            loadQueues(); // โหลดคิวใหม่หลังเรียก
+            // Enable repeat and complete buttons
+            document.querySelector(`#repeatBtn${counterIndex}`).disabled = false;
+            document.querySelector(`#completeBtn${counterIndex}`).disabled = false;
+
+            // Disable call button
+            document.querySelector(`#callBtn${counterIndex}`).disabled = true;
+          } else {
+            console.error('API ส่งกลับ success: false', result);
+            alert('เกิดข้อผิดพลาดในการเรียกคิว');
+          }
+        })
+        .withFailureHandler((error) => {
+          console.error('เรียกฟังก์ชัน callQueue ล้มเหลว:', error);
+          alert('เกิดข้อผิดพลาดในการเรียกคิว (Google Apps Script)');
+        })
+        .callNextQueue(counterIndex + 1);
+      // เรียกฟังก์ชันใน server-side
+    }
+
+    function repeatQueue(counterIndex) {
+      const currentQueue = currentQueues[counterIndex];
+      console.error('oooooo', counterIndex);
+      console.error('ooooooq', currentQueue);
+
+      if (currentQueue) {
+        google.script.run
+          .withSuccessHandler((result) => {
+            //const parsed = JSON.parse(result); // ต้อง parse ถ้า return เป็น string
+            if (result) {
+              console.error('oooooo9', result);
+
+              loadQueues(); // โหลดคิวใหม่หลังเรียก
+
+              // Disable call button
+            } else {
+              console.error('API ส่งกลับ success: false', result);
+              alert('เกิดข้อผิดพลาดในการเรียกคิว');
+            }
+          })
+          .withFailureHandler((error) => {
+            //console.error('เรียกฟังก์ชัน callQueue ล้มเหลว:', error);
+            alert('เกิดข้อผิดพลาดในการเรียกคิว (Google Apps Script)');
+          })
+          .recallCurrentQueue(currentQueue.queueNumber);
+        // เรียกฟังก์ชันใน server-side
+        //lastCalledQueueNumbers = lastCalledQueueNumbers.filter(q => q !== currentQueue.queueNumber);
+        //speakQueue(currentQueue.queueNumber, counterIndex + 1);
+        //alert(`เรียกซ้ำคิว ${currentQueue.queueNumber}`);
+
+      }
+    }
+
+    function completeQueue(counterIndex) {
+      const currentQueue = currentQueues[counterIndex];
+      if (currentQueue) {
+        try {
+          google.script.run
+            .withSuccessHandler((result) => {
+              if (result === true) {
+                // ทำเครื่องหมายคิวเสร็จแล้ว
+                alert(`คิว ${currentQueue.queueNumber} เสร็จสิ้นแล้ว`);
+
+                // ล้างคิวบน UI
+                currentQueues[counterIndex] = null;
+                document.getElementById(`counter${counterIndex}Queue`).textContent = '-';
+
+                // โหลด UI ใหม่
+                generateCounterControls();
+              } else {
+                console.error('API ส่งกลับ success: false หรือไม่คืนค่า', result);
+                alert('เกิดข้อผิดพลาดในการทำเครื่องหมายคิวเสร็จสิ้น');
+              }
+            })
+            .withFailureHandler((error) => {
+              console.error('เรียกฟังก์ชัน markQueueAsDone ล้มเหลว:', error);
+              alert('เกิดข้อผิดพลาดในการเรียกคิว (Google Apps Script)');
+            })
+            .markQueueAsDone(currentQueue.queueNumber, counterIndex + 1);
+        } catch (error) {
+          console.error('Error completing queue:', error);
+          alert('เกิดข้อผิดพลาดใน try/catch ของ completeQueue');
+        }
+      } else {
+        alert('ไม่พบคิวในเคาน์เตอร์นี้');
+      }
+    }
+
+
+    function toggleCounter(counterIndex) {
+      activeCounters[counterIndex] = !activeCounters[counterIndex];
+      generateCounterControls();
+    }
+
+    function speakQueue(queueNumber, counter) {
+      console.log('speech');
+      if ('speechSynthesis' in window) {
+        const msg = new SpeechSynthesisUtterance(`ขอเชิญ...หมายเลข..., ${queueNumber}..., ที่เคาน์เตอร์..., ${counter}`);
+        msg.lang = 'th-TH';
+        msg.pitch = 1;       // ความสูงเสียง
+        msg.rate = 0.4;
+        msg.volume = 1;
+        window.speechSynthesis.speak(msg);
+      }
+    }
+
+
+
+    function staffLogout() {
+      document.getElementById('staffUsername').value = '';
+      document.getElementById('staffPassword').value = '';
+      showMenuScreen();
+    }
+
+    // Screen navigation functions
+    function hideAllScreens() {
+      document.getElementById('menuScreen').classList.add('hidden');
+      document.getElementById('studentScreen').classList.add('hidden');
+      document.getElementById('successScreen').classList.add('hidden');
+      document.getElementById('displayScreen').classList.add('hidden');
+      document.getElementById('staffLoginScreen').classList.add('hidden');
+      document.getElementById('staffPanelScreen').classList.add('hidden');
+      if (displayScreenInterval) {
+        clearInterval(displayScreenInterval); // Clear the interval when leaving display screen
+        displayScreenInterval = null;
+      }
+    }
+
+    function showMenuScreen() {
+      hideAllScreens();
+      document.getElementById('menuScreen').classList.remove('hidden');
+    }
+
+    function showStudentScreen() {
+      hideAllScreens();
+      document.getElementById('studentScreen').classList.remove('hidden');
+    }
+
+    function showDisplayScreen() {
+      hideAllScreens();
+      document.getElementById('displayScreen').classList.remove('hidden');
+      // Load and display current queues
+      loadAndDisplayQueues();
+      displayScreenInterval = setInterval(loadAndDisplayQueues, 5000); // Refresh every 5 seconds
+    }
+
+    function showStaffScreen() {
+      hideAllScreens();
+      document.getElementById('staffLoginScreen').classList.remove('hidden');
+    }
+
+
+    function loadAndDisplayQueues() { //00
+
+      // เรียกใช้ Google Apps Script Function
+      google.script.run
+        .withSuccessHandler(function (result) {
+          //console.log('result:', result);
+          const parsed = JSON.parse(result); // ต้อง parse ถ้า return เป็น string
+          handleQueueData(parsed);
+        })
+        .withFailureHandler(function (error) {
+          // เรียกเมื่อเกิดข้อผิดพลาด
+          //console.error('Error:', error);
+          alert('เกิดข้อผิดพลาด: ' + error.message);
+        })
+        .getQueues();
+    }
+
+    function handleQueueData(result) {
+      try {
+        if (!result || typeof result !== 'object') {
+          throw new Error('Invalid response from server');
+        }
+
+        const { calledQueues = [], waitingQueues = [], completedQueues = [] } = result;
+        // ===============================
+        // ✅ แสดงคิวที่กำลังเรียก
+        // ===============================
+        const queueNumberEl = document.getElementById('display-queue-number');
+        const counterNumberEl = document.getElementById('display-counter-number');
+
+        if (calledQueues.length > 0) {
+          const currentQueue = calledQueues[calledQueues.length - 1];
+          queueNumberEl.textContent = currentQueue.queueNumber || '-';
+          counterNumberEl.textContent = currentQueue.counter || '1';
+        } else {
+          queueNumberEl.textContent = '-';
+          counterNumberEl.textContent = '-';
+        }
+
+        // ===============================
+        // ✅ แสดงคิวก่อนหน้า 2 คิว (ถ้ามี)
+        // ===============================
+        const pq1 = document.querySelector('#previous-queue-1');
+        const pq2 = document.querySelector('#previous-queue-2');
+
+        if (calledQueues.length > 1) {
+          const prev1 = calledQueues[calledQueues.length - 2];
+          pq1.children[0].textContent = prev1.queueNumber || '-';
+          pq1.children[1].textContent = prev1.counter || '1';
+        } else {
+          pq1.children[0].textContent = '-';
+          pq1.children[1].textContent = '-';
+        }
+
+        if (calledQueues.length > 2) {
+          const prev2 = calledQueues[calledQueues.length - 3];
+          pq2.children[0].textContent = prev2.queueNumber || '-';
+          pq2.children[1].textContent = prev2.counter || '1';
+        } else {
+          pq2.children[0].textContent = '-';
+          pq2.children[1].textContent = '-';
+        }
+
+        // ===============================
+        // ✅ แสดงคิวที่เสร็จสิ้น
+        // ===============================
+        // const previousQueuesDiv = document.getElementById('previousQueuesDisplay');
+        // const previousQueuesList = document.getElementById('previousQueuesList');
+
+        // if (completedQueues.length > 0) {
+        //   const recent = completedQueues.slice(-4); // แสดงล่าสุด 4 รายการ
+        //   previousQueuesList.innerHTML = recent.map(queue => `
+        //       <div class="bg-gray-100 rounded-lg p-4 text-center">
+        //           <div class="text-3xl font-bold text-gray-600 mb-2">${queue.queueNumber}</div>
+        //           <div class="text-sm text-gray-500">เคาน์เตอร์ ${queue.counter || 1} | ${queue.time}</div>
+        //       </div>
+        //   `).join('');
+        //   previousQueuesDiv.classList.remove('hidden');
+
+        // } else {
+        //   previousQueuesList.innerHTML = `<div class="text-center text-gray-400">ยังไม่มีคิวที่เสร็จสิ้น</div>`;
+        //   previousQueuesDiv.classList.remove('hidden');
+        // }
+        pollCalledQueues(result); // Call pollCalledQueues here
+      } catch (error) {
+        console.error('Error in handleQueueData:', error);
+        alert('เกิดข้อผิดพลาดในการแสดงผล: ' + error.message);
+      }
+    }
+
+    // ฟังก์ชันแสดงข้อผิดพลาด
+    function handleQueueError(error) {
+      console.error('Error:', error);
+      const currentQueueDiv = document.getElementById('currentQueueDisplay');
+      currentQueueDiv.innerHTML = `
+    <div class="text-center py-8 bg-red-50 rounded-xl">
+      <div class="text-red-500 text-4xl mb-4">⚠️</div>
+      <p class="text-red-600 font-medium">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>
+      <p class="text-sm text-gray-500 mt-2">${error.message}</p>
+      <button onclick="loadAndDisplayQueues()" 
+        class="mt-4 px-4 py-2 bg-[#ff5790] text-white rounded hover:bg-[#e04a7a] transition">
+        โหลดใหม่
+      </button>
+    </div>
+  `;
+    }
+
+    // Moved inside showDisplayScreen function in the modified code
+    let lastCalledQueueNumbers = [];
+
+    function pollCalledQueues(result) {
+      const calledQueues = result.calledQueues;
+      if (!calledQueues || calledQueues.length === 0) return;
+      calledQueues.forEach(queue => {
+        const isAlreadyCalled = lastCalledQueueNumbers.some(q =>
+          q.queueNumber === queue.queueNumber && q.callNum === queue.callNum
+        );
+
+        if (!isAlreadyCalled) {
+          speakQueue(queue.queueNumber, queue.counter);
+          console.log("เรียกคิวใหม่:", queue.queueNumber);
+
+          lastCalledQueueNumbers.push({
+            queueNumber: queue.queueNumber,
+            callNum: queue.callNum
+          });
+
+          if (lastCalledQueueNumbers.length > 20) {
+            lastCalledQueueNumbers.shift();
+          }
+        }
+      });
+    }
+
+  </script>
+</body>
+
+</html>
